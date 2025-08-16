@@ -180,9 +180,11 @@ async function getOpenAIResponse(question, context) {
 }
 
 // Start the Express server for Render's port binding requirement
+// According to Render docs: must bind to 0.0.0.0 and use PORT env var
 const port = process.env.PORT || 10000;
 expressApp.listen(port, '0.0.0.0', () => {
-  console.log(`🌐 Express server listening on port ${port} (Render requirement)`);
+  console.log(`🌐 Express server listening on port ${port} on 0.0.0.0 (Render requirement)`);
+  console.log(`🏥 Health check available at: http://0.0.0.0:${port}/health`);
 });
 
 // Start the Slack app with Socket Mode
@@ -193,7 +195,6 @@ expressApp.listen(port, '0.0.0.0', () => {
     console.log('📡 Connected via Socket Mode!');
     console.log('✅ @advisor mentions, DMs, and slash commands will work');
     console.log('🌐 Your bot is now connected and ready to respond!');
-    console.log(`🏥 Health check available at: http://localhost:${port}/health`);
   } catch (error) {
     console.error('Failed to start Slack app:', error);
     process.exit(1);
