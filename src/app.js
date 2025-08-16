@@ -54,11 +54,12 @@ expressApp.get('/health', (req, res) => {
   });
 });
 
-// Handle when someone mentions @advisor in a channel
+// Handle when someone mentions your bot (any mention will work)
 app.event('app_mention', async ({ event, say }) => {
   try {
     console.log('Received mention:', event.text);
     
+    // Extract the question (remove the bot mention)
     const question = event.text.replace(/<@[^>]+>/, '').trim();
     
     if (!question) {
@@ -111,8 +112,8 @@ app.message(async ({ message, say }) => {
   }
 });
 
-// Handle slash command /advisor
-app.command('/advisor', async ({ command, ack, respond }) => {
+// Handle slash command - update this to match your bot's name
+app.command('/north', async ({ command, ack, respond }) => {
   await ack();
   
   try {
@@ -193,7 +194,7 @@ expressApp.listen(port, '0.0.0.0', () => {
     await app.start();
     console.log('⚡️ Slack Advisor App is running!');
     console.log('📡 Connected via Socket Mode!');
-    console.log('✅ @advisor mentions, DMs, and slash commands will work');
+    console.log('✅ @north mentions, DMs, and /north commands will work');
     console.log('🌐 Your bot is now connected and ready to respond!');
   } catch (error) {
     console.error('Failed to start Slack app:', error);
