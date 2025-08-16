@@ -1,11 +1,9 @@
-import { App } from '@slack/bolt';
-import OpenAI from 'openai';
-import { createClient } from '@supabase/supabase-js';
-import express from 'express';
-import { MemoryService } from './services/memoryService.js';
-import dotenv from 'dotenv';
-
-dotenv.config();
+const { App } = require('@slack/bolt');
+const OpenAI = require('openai');
+const { createClient } = require('@supabase/supabase-js');
+const express = require('express');
+const { MultiAdvisorMemoryService } = require('./services/multiAdvisorMemoryService.js');
+require('dotenv').config();
 
 // Initialize our services
 const openai = new OpenAI({
@@ -17,11 +15,7 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
-const memoryService = new MemoryService();
-
-// Create Express app for Render's port binding requirement
-const expressApp = express();
-expressApp.use(express.json());
+const memoryService = new MultiAdvisorMemoryService();
 
 // Check if we have an app token for Socket Mode
 const hasAppToken = process.env.SLACK_APP_TOKEN && process.env.SLACK_APP_TOKEN.startsWith('xapp-');
@@ -39,6 +33,9 @@ const app = new App({
   socketMode: true,
   appToken: process.env.SLACK_APP_TOKEN,
 });
+
+// Minimal Express app for Render's port binding requirement only
+const expressApp = express();
 
 // Health check endpoint for Render
 expressApp.get('/', (req, res) => {
@@ -158,34 +155,35 @@ async function processMessage(message, threadId, source) {
       const knowledge = memoryService.extractKnowledgeFromRequest(message);
       
       if (knowledge) {
-        // Store the knowledge
-        await memoryService.storeKnowledge(knowledge, {
+        // Store the knowledge in shared knowledge base
+        await memoryService.storeSharedKnowledge(knowledge, {
           source: source,
+          advisor_id: 'north',
           thread_id: threadId,
           user_request: true
         });
 
-        return `✅ I've stored that in my memory: "${knowledge}"\n\nI'll remember this for future conversations!`;
+        return `✅ I've stored that in our shared knowledge base: "${knowledge}"\n\nI'll remember this for future conversations!`;
       } else {
         return "I'd be happy to remember something for you! Please tell me what you'd like me to remember.";
       }
     }
 
     // Get relevant knowledge from memory
-    const relevantDocs = await memoryService.retrieveKnowledge(message);
+    const relevantDocs = await memoryService.retrieveSharedKnowledge(message);
     
-    // Get or create thread mapping for conversation memory
-    const assistantThreadId = await memoryService.getThreadMapping(threadId);
+    // Get or create advisor-specific thread mapping
+    const assistantThreadId = await memoryService.getAdvisorThreadMapping('north', threadId);
     
-    // Create context from relevant documents
+    // Create context from advisor profile and relevant documents
     let context = "You are North, an AI advisor for Evernorth. Use your knowledge to provide helpful and accurate responses.";
     
     if (relevantDocs.length > 0) {
-      context += "\n\nRelevant information from my knowledge base:\n";
+      context += "\n\nRelevant information from our shared knowledge base:\n";
       relevantDocs.forEach((doc, i) => {
         context += `\n${i + 1}. ${doc.content}`;
       });
-      context += "\n\nUse this information to provide accurate responses. If the user asks about something not covered in this context, use your general knowledge.";
+      context += "\n\nUse this information to provide accurate responses. If the user asks about something not covered in this context, use your general knowledge and expertise.";
     }
 
     // Get response from OpenAI Assistant with context
@@ -193,6 +191,12 @@ async function processMessage(message, threadId, source) {
     
     // Store the conversation for memory
     await memoryService.storeConversation(assistantThreadId, message, response);
+    
+    // Store advisor-specific short-term memory (e.g., user preferences, context)
+    await memoryService.storeAdvisorMemory('north', 'last_topic', {
+      topic: message.substring(0, 100),
+      timestamp: new Date().toISOString()
+    });
     
     return response;
 
@@ -252,11 +256,10 @@ async function getOpenAIResponseWithContext(question, context, assistantThreadId
   }
 }
 
-// Start the Express server for Render's port binding requirement
-// According to Render docs: must bind to 0.0.0.0 and use PORT env var
+// Start minimal Express server for Render's port binding requirement only
 const port = process.env.PORT || 10000;
 expressApp.listen(port, '0.0.0.0', () => {
-  console.log(`🌐 Express server listening on port ${port} on 0.0.0.0 (Render requirement)`);
+  console.log(`🌐 Express server listening on port ${port} (Render requirement only)`);
   console.log(`🏥 Health check available at: http://0.0.0.0:${port}/health`);
 });
 
@@ -270,6 +273,8 @@ expressApp.listen(port, '0.0.0.0', () => {
     console.log('🌐 Your bot is now connected and ready to respond!');
     console.log('🤖 Using OpenAI Assistant ID:', process.env.OPENAI_ASSISTANT_ID || 'NOT SET');
     console.log('🧠 Memory service enabled with Supabase integration');
+    console.log('🔗 Shared knowledge base accessible');
+    console.log('💡 No webhook URL needed - direct Socket Mode connection');
   } catch (error) {
     console.error('Failed to start Slack app:', error);
     process.exit(1);
