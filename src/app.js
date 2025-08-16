@@ -13,10 +13,21 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
-// Create the Slack app
+// Create the Slack app with Socket Mode
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
+  socketMode: true,
+  appToken: process.env.SLACK_APP_TOKEN,
+});
+
+// Health check endpoint
+app.receiver.app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    message: 'Slack Advisor App is running!'
+  });
 });
 
 // Handle when someone mentions @advisor in a channel
@@ -152,9 +163,9 @@ const port = process.env.PORT || 3000;
     console.log('⚡️ Slack Advisor App is running!');
     console.log(`🌐 Port: ${port}`);
     console.log(`🔗 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log('📡 Ready to receive Slack events!');
-    console.log('📋 Slack Configuration:');
-    console.log(`Set your Request URL in Slack to: https://your-app-url.com/slack/events`);
+    console.log('📡 Ready to receive Slack events via Socket Mode!');
+    console.log('📋 Your bot is now connected and ready to respond!');
+    console.log(`🏥 Health check available at: http://localhost:${port}/health`);
   } catch (error) {
     console.error('Failed to start app:', error);
     process.exit(1);
