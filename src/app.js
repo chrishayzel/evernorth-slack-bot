@@ -24,77 +24,64 @@ const app = new App({
   appToken: hasAppToken ? process.env.SLACK_APP_TOKEN : undefined,
 });
 
-// Health check endpoint
-app.receiver.app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    message: 'Slack Advisor App is running!',
-    socketMode: hasAppToken ? 'enabled' : 'disabled',
-    note: hasAppToken ? 'Full bot features available' : 'Slash commands only - add SLACK_APP_TOKEN for full features'
-  });
+// Handle when someone mentions @advisor in a channel
+app.event('app_mention', async ({ event, say }) => {
+  try {
+    console.log('Received mention:', event.text);
+    
+    const question = event.text.replace(/<@[^>]+>/, '').trim();
+    
+    if (!question) {
+      await say({
+        text: "Hi! I'm your AI advisor. What would you like to know?",
+        thread_ts: event.ts
+      });
+      return;
+    }
+
+    const context = await getRelevantContext(question);
+    const response = await getOpenAIResponse(question, context);
+    
+    await say({
+      text: response,
+      thread_ts: event.ts
+    });
+
+  } catch (error) {
+    console.error('Error handling mention:', error);
+    await say({
+      text: "Sorry, I'm having trouble processing your request right now. Please try again later.",
+      thread_ts: event.ts
+    });
+  }
 });
 
-// Handle when someone mentions @advisor in a channel (only works with Socket Mode)
-if (hasAppToken) {
-  app.event('app_mention', async ({ event, say }) => {
+// Handle direct messages
+app.message(async ({ message, say }) => {
+  if (message.channel_type === 'im' && !message.subtype) {
     try {
-      console.log('Received mention:', event.text);
+      console.log('Received DM:', message.text);
       
-      const question = event.text.replace(/<@[^>]+>/, '').trim();
+      const question = message.text.trim();
       
       if (!question) {
-        await say({
-          text: "Hi! I'm your AI advisor. What would you like to know?",
-          thread_ts: event.ts
-        });
+        await say("Hi! I'm your AI advisor. What would you like to know?");
         return;
       }
 
       const context = await getRelevantContext(question);
       const response = await getOpenAIResponse(question, context);
       
-      await say({
-        text: response,
-        thread_ts: event.ts
-      });
+      await say(response);
 
     } catch (error) {
-      console.error('Error handling mention:', error);
-      await say({
-        text: "Sorry, I'm having trouble processing your request right now. Please try again later.",
-        thread_ts: event.ts
-      });
+      console.error('Error handling DM:', error);
+      await say("Sorry, I'm having trouble processing your request right now. Please try again later.");
     }
-  });
+  }
+});
 
-  // Handle direct messages (only works with Socket Mode)
-  app.message(async ({ message, say }) => {
-    if (message.channel_type === 'im' && !message.subtype) {
-      try {
-        console.log('Received DM:', message.text);
-        
-        const question = message.text.trim();
-        
-        if (!question) {
-          await say("Hi! I'm your AI advisor. What would you like to know?");
-          return;
-        }
-
-        const context = await getRelevantContext(question);
-        const response = await getOpenAIResponse(question, context);
-        
-        await say(response);
-
-      } catch (error) {
-        console.error('Error handling DM:', error);
-        await say("Sorry, I'm having trouble processing your request right now. Please try again later.");
-      }
-    }
-  });
-}
-
-// Handle slash command /advisor (works in both modes)
+// Handle slash command /advisor
 app.command('/advisor', async ({ command, ack, respond }) => {
   await ack();
   
@@ -175,12 +162,13 @@ const port = process.env.PORT || 3000;
       console.log('📡 Socket Mode enabled - all bot features available!');
       console.log('✅ @advisor mentions, DMs, and slash commands will work');
     } else {
-      console.log('📡 Socket Mode disabled - slash commands only');
+      console.log('📡 Socket Mode disabled - limited features');
       console.log('ℹ️  Add SLACK_APP_TOKEN to enable @advisor mentions and DMs');
+      console.log('ℹ️  Slash commands will still work');
     }
     
     console.log('📋 Your bot is now connected and ready to respond!');
-    console.log(`🏥 Health check available at: http://localhost:${port}/health`);
+    console.log('🏥 Health check not available in this mode - check logs for status');
   } catch (error) {
     console.error('Failed to start app:', error);
     process.exit(1);
