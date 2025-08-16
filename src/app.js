@@ -1,6 +1,7 @@
 const { App } = require('@slack/bolt');
 const OpenAI = require('openai');
 const { createClient } = require('@supabase/supabase-js');
+const express = require('express');
 require('dotenv').config();
 
 // Initialize our services
@@ -12,6 +13,10 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
+
+// Create Express app for Render's port binding requirement
+const expressApp = express();
+expressApp.use(express.json());
 
 // Check if we have an app token for Socket Mode
 const hasAppToken = process.env.SLACK_APP_TOKEN && process.env.SLACK_APP_TOKEN.startsWith('xapp-');
@@ -28,6 +33,25 @@ const app = new App({
   signingSecret: process.env.SLACK_SIGNING_SECRET,
   socketMode: true,
   appToken: process.env.SLACK_APP_TOKEN,
+});
+
+// Health check endpoint for Render
+expressApp.get('/', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Slack Advisor App is running!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Health check endpoint
+expressApp.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Slack Advisor App is running!',
+    timestamp: new Date().toISOString(),
+    socketMode: 'enabled'
+  });
 });
 
 // Handle when someone mentions @advisor in a channel
@@ -155,17 +179,23 @@ async function getOpenAIResponse(question, context) {
   }
 }
 
-// Start the app with Socket Mode (no web server needed)
+// Start the Express server for Render's port binding requirement
+const port = process.env.PORT || 10000;
+expressApp.listen(port, '0.0.0.0', () => {
+  console.log(`🌐 Express server listening on port ${port} (Render requirement)`);
+});
+
+// Start the Slack app with Socket Mode
 (async () => {
   try {
     await app.start();
     console.log('⚡️ Slack Advisor App is running!');
-    console.log('📡 Connected via Socket Mode - no web server needed!');
+    console.log('📡 Connected via Socket Mode!');
     console.log('✅ @advisor mentions, DMs, and slash commands will work');
     console.log('🌐 Your bot is now connected and ready to respond!');
-    console.log('💡 No ports needed - direct connection to Slack');
+    console.log(`🏥 Health check available at: http://localhost:${port}/health`);
   } catch (error) {
-    console.error('Failed to start app:', error);
+    console.error('Failed to start Slack app:', error);
     process.exit(1);
   }
 })();
