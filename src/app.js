@@ -16,12 +16,18 @@ const supabase = createClient(
 // Check if we have an app token for Socket Mode
 const hasAppToken = process.env.SLACK_APP_TOKEN && process.env.SLACK_APP_TOKEN.startsWith('xapp-');
 
-// Create the Slack app with conditional Socket Mode
+if (!hasAppToken) {
+  console.error('❌ SLACK_APP_TOKEN is required for Socket Mode');
+  console.error('Please add SLACK_APP_TOKEN to your environment variables');
+  process.exit(1);
+}
+
+// Create the Slack app with Socket Mode
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  socketMode: hasAppToken,
-  appToken: hasAppToken ? process.env.SLACK_APP_TOKEN : undefined,
+  socketMode: true,
+  appToken: process.env.SLACK_APP_TOKEN,
 });
 
 // Handle when someone mentions @advisor in a channel
@@ -149,26 +155,15 @@ async function getOpenAIResponse(question, context) {
   }
 }
 
-// Start the app
-const port = process.env.PORT || 3000;
+// Start the app with Socket Mode (no web server needed)
 (async () => {
   try {
-    await app.start(port);
+    await app.start();
     console.log('⚡️ Slack Advisor App is running!');
-    console.log(`🌐 Port: ${port}`);
-    console.log(`🔗 Environment: ${process.env.NODE_ENV || 'development'}`);
-    
-    if (hasAppToken) {
-      console.log('📡 Socket Mode enabled - all bot features available!');
-      console.log('✅ @advisor mentions, DMs, and slash commands will work');
-    } else {
-      console.log('📡 Socket Mode disabled - limited features');
-      console.log('ℹ️  Add SLACK_APP_TOKEN to enable @advisor mentions and DMs');
-      console.log('ℹ️  Slash commands will still work');
-    }
-    
-    console.log('📋 Your bot is now connected and ready to respond!');
-    console.log('🏥 Health check not available in this mode - check logs for status');
+    console.log('📡 Connected via Socket Mode - no web server needed!');
+    console.log('✅ @advisor mentions, DMs, and slash commands will work');
+    console.log('🌐 Your bot is now connected and ready to respond!');
+    console.log('💡 No ports needed - direct connection to Slack');
   } catch (error) {
     console.error('Failed to start app:', error);
     process.exit(1);
