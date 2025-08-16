@@ -70,8 +70,7 @@ app.event('app_mention', async ({ event, say }) => {
       return;
     }
 
-    const context = await getRelevantContext(question);
-    const response = await getOpenAIResponse(question, context);
+    const response = await getOpenAIResponse(question);
     
     await say({
       text: response,
@@ -100,8 +99,7 @@ app.message(async ({ message, say }) => {
         return;
       }
 
-      const context = await getRelevantContext(question);
-      const response = await getOpenAIResponse(question, context);
+      const response = await getOpenAIResponse(question);
       
       await say(response);
 
@@ -127,8 +125,7 @@ app.command('/north', async ({ command, ack, respond }) => {
       return;
     }
 
-    const context = await getRelevantContext(question);
-    const response = await getOpenAIResponse(question, context);
+    const response = await getOpenAIResponse(question);
     
     await respond({
       text: response,
@@ -144,36 +141,53 @@ app.command('/north', async ({ command, ack, respond }) => {
   }
 });
 
-// Function to get relevant context
-async function getRelevantContext(question) {
+// Function to get response from your custom OpenAI Assistant
+async function getOpenAIResponse(question) {
   try {
-    return "You are a helpful AI advisor. Use your knowledge to provide accurate and helpful responses.";
-  } catch (error) {
-    console.error('Error getting context:', error);
-    return "You are a helpful AI advisor.";
-  }
-}
+    // Check if we have an assistant ID
+    if (!process.env.OPENAI_ASSISTANT_ID) {
+      console.error('❌ OPENAI_ASSISTANT_ID is required');
+      throw new Error('Assistant ID not configured');
+    }
 
-// Function to get response from OpenAI
-async function getOpenAIResponse(question, context) {
-  try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        {
-          role: "system",
-          content: context
-        },
-        {
-          role: "user",
-          content: question
-        }
-      ],
-      max_tokens: 500,
-      temperature: 0.7,
+    console.log('Using OpenAI Assistant ID:', process.env.OPENAI_ASSISTANT_ID);
+    
+    // Create a thread and run the assistant
+    const thread = await openai.beta.threads.create();
+    
+    // Add the user's message to the thread
+    await openai.beta.threads.messages.create(thread.id, {
+      role: 'user',
+      content: question
     });
-
-    return completion.choices[0].message.content;
+    
+    // Run the assistant
+    const run = await openai.beta.threads.runs.create(thread.id, {
+      assistant_id: process.env.OPENAI_ASSISTANT_ID
+    });
+    
+    // Wait for the run to complete
+    let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+    
+    while (runStatus.status === 'in_progress' || runStatus.status === 'queued') {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+    }
+    
+    if (runStatus.status === 'completed') {
+      // Get the assistant's response
+      const messages = await openai.beta.threads.messages.list(thread.id);
+      const lastMessage = messages.data[0];
+      
+      if (lastMessage.content && lastMessage.content[0] && lastMessage.content[0].text) {
+        return lastMessage.content[0].text.value;
+      } else {
+        return "I received your message but couldn't generate a response.";
+      }
+    } else {
+      throw new Error(`Assistant run failed with status: ${runStatus.status}`);
+    }
+    
   } catch (error) {
     console.error('Error getting OpenAI response:', error);
     throw new Error('Failed to get AI response');
@@ -196,6 +210,7 @@ expressApp.listen(port, '0.0.0.0', () => {
     console.log('📡 Connected via Socket Mode!');
     console.log('✅ @north mentions, DMs, and /north commands will work');
     console.log('🌐 Your bot is now connected and ready to respond!');
+    console.log('🤖 Using OpenAI Assistant ID:', process.env.OPENAI_ASSISTANT_ID || 'NOT SET');
   } catch (error) {
     console.error('Failed to start Slack app:', error);
     process.exit(1);
