@@ -1,14 +1,18 @@
 {
   "name": "slack-advisor-app",
   "version": "1.0.0",
-  "description": "A real-time Slack advisor bot powered by OpenAI Assistants API",
+  "description": "A real-time Slack advisor bot powered by OpenAI Assistants API with Supabase memory",
   "main": "src/app.js",
+  "type": "module",
   "scripts": {
     "start": "node src/app.js",
+    "start:multi": "node src/app-multi-advisor.js",
     "dev": "nodemon src/app.js",
+    "dev:multi": "nodemon src/app-multi-advisor.js",
+    "ingest": "node ingest.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["slack", "openai", "advisor", "bot"],
+  "keywords": ["slack", "openai", "advisor", "bot", "supabase", "memory", "multi-advisor"],
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
