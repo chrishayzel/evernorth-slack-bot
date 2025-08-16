@@ -1,6 +1,7 @@
 const { App } = require('@slack/bolt');
 const OpenAI = require('openai');
 const { createClient } = require('@supabase/supabase-js');
+const express = require('express');
 require('dotenv').config();
 
 // Initialize our services
@@ -13,10 +14,33 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+// Create Express app for handling Slack events
+const expressApp = express();
+expressApp.use(express.json());
+
 // Create the Slack app - using Events API for production
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
+});
+
+// Handle Slack's URL verification challenge
+expressApp.post('/slack/events', async (req, res) => {
+  // Handle URL verification challenge
+  if (req.body && req.body.type === 'url_verification') {
+    console.log('Received URL verification challenge');
+    res.status(200).json({ challenge: req.body.challenge });
+    return;
+  }
+  
+  // Handle other events normally
+  try {
+    await app.processEvent(req.body);
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Error processing event:', error);
+    res.status(500).send('Error processing event');
+  }
 });
 
 // Handle when someone mentions @advisor in a channel
@@ -160,7 +184,7 @@ async function getOpenAIResponse(question, context) {
 }
 
 // Health check endpoint for hosting platforms
-app.get('/health', (req, res) => {
+expressApp.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
@@ -173,14 +197,12 @@ const port = process.env.PORT || 3000;
   console.log(`🔗 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('📡 Ready to receive Slack events!');
   
-  // Show the Request URL for Slack configuration
-  if (process.env.NODE_ENV === 'production') {
-    console.log('\n📋 Slack Configuration:');
+  // Start Express server for Slack events
+  expressApp.listen(port + 1, () => {
+    console.log(`📡 Express server listening on port ${port + 1}`);
+    console.log('📋 Slack Configuration:');
     console.log('Set your Request URL in Slack to:');
     console.log(`   https://your-app-url.com/slack/events`);
     console.log('Replace "your-app-url.com" with your actual domain');
-  } else {
-    console.log('\n📋 For local testing, set Request URL to:');
-    console.log(`   http://localhost:${port}/slack/events`);
-  }
+  });
 })();
